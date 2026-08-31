@@ -1,0 +1,53 @@
+# Half of a prod-vs-int A/B. Run compare-prod and compare-int, then diff the
+# detections for the two action@sha pairs below. Expected on prod:
+#   Action-Uses-Imposter-Commit (both jobs)
+#
+# Deliberately workflow_dispatch only: job "guard" makes hundreds of compare
+# calls against one repo, so these must not be fired alongside the rest of the
+# suite.
+name: compare-prod
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # The incident itself. 6f5948df is the head of codeql-action's releases/v3, so
+  # it is a normal release commit and must never be an imposter commit.
+  #
+  # Do NOT delete the prod ImposterCommits row before running this: prod fails
+  # here by serving the wrong cached verdict written on 26 Aug, and a fresh prod
+  # analysis would most likely get it right, because the original fault was
+  # non-deterministic. The stale row IS the customer-visible failure.
+  incident:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
+      # Root action.yml is a stub that exits 1; the Set up job download line is
+      # what the analysis consumes.
+      - name: codeql-action at the incident SHA
+        continue-on-error: true
+        uses: github/codeql-action@6f5948dfacef28e207b48d0905cf90c03365536d
+
+  # Deterministic half, independent of any cached row: a commit neither
+  # environment has ever analysed, in a repo with 521 branches.
+  #
+  # The commit is genuinely on no branch, so prod's "imposter" is right by luck -
+  # it walked every branch and found nothing. The point is that prod cannot tell
+  # that outcome apart from "we could not finish checking", which is the confusion
+  # that produced the incident. int refuses to make the claim it cannot prove and
+  # reports the finding it can.
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
+      - name: 521-branch repo at a fresh orphan SHA
+        uses: tushar-stepsecurity/icd-test-bigrepo@38978b1c880a3dd91217012ef711dfee6128e281
