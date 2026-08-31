@@ -1,0 +1,20 @@
+name: s01 Release branch head (fast path)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
+      - name: Action under test
+        uses: tushar-stepsecurity/icd-test-action@44164e3403e32ad6672f8fa7d40806d0cc4dd30a

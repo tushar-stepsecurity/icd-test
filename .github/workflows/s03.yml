@@ -1,0 +1,20 @@
+name: s03 Default branch head (clean)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
+      - name: Action under test
+        uses: tushar-stepsecurity/icd-test-action@bd121c99f67582811d39e5d216f8c1fd9e559e9e

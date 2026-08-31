@@ -1,0 +1,20 @@
+name: s12 Same-repo action, skipped
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
+      - name: Action under test
+        uses: tushar-stepsecurity/icd-test/.github/actions/local-fixture@main

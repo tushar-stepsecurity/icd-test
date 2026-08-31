@@ -1,0 +1,7 @@
+name: 'Local fixture action'
+description: 'Lives in this repo, referenced by full name to exercise the same-repo skip'
+runs:
+  using: 'composite'
+  steps:
+    - shell: bash
+      run: echo "local fixture action ran"

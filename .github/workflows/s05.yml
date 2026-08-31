@@ -1,0 +1,20 @@
+name: s05 Real imposter, shared history
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
+      - name: Action under test
+        uses: tushar-stepsecurity/icd-test-action@f3f99fa41c3bbc0a2268f698b520f5f92465a401

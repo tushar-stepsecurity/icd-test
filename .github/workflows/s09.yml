@@ -1,0 +1,20 @@
+name: s09 codeql-action v3, the incident
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
+      - name: Action under test
+        uses: github/codeql-action@6f5948dfacef28e207b48d0905cf90c03365536d

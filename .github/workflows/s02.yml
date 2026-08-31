@@ -1,0 +1,20 @@
+name: s02 Release branch contained, not head (walk)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
+      - name: Action under test
+        uses: tushar-stepsecurity/icd-test-action@76f03925a1be109c6c36a4ba6ab18bbea4a8b5f7
