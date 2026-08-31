@@ -51,3 +51,32 @@ jobs:
           egress-policy: audit
       - name: 521-branch repo at a fresh orphan SHA
         uses: tushar-stepsecurity/icd-test-bigrepo@38978b1c880a3dd91217012ef711dfee6128e281
+
+  # A plainly legitimate release commit: tip of releases/v3 in icd-test-action,
+  # tagged v3, compare(releases/v3...sha) = identical.
+  #
+  # On a FRESH analysis both environments clear this - the old walk lists three
+  # branches and finds releases/v3 immediately. It is a negative control, and it
+  # is also the shape of commit the incident falsely flagged.
+  #
+  # To reproduce the false detection on prod, seed the state the bug produced
+  # (the analysis cannot be made to fail on demand - the original fault needed a
+  # branch list mutating mid-pagination or a transient 404):
+  #
+  #   aws dynamodb put-item --table-name ImposterCommits --item '{
+  #     "action":{"S":"tushar-stepsecurity/icd-test-action"},
+  #     "sha":{"S":"bf295e279a4576b930d6c9144581de13f91335e3"},
+  #     "is_imposter_commit":{"BOOL":true},
+  #     "is_commit_on_default_branch":{"BOOL":false},
+  #     "tag":{"S":"v3"}}'
+  #
+  # Seed it in prod only, and leave int without a row so int analyses fresh.
+  valid_release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
+      - name: Legitimate release commit
+        uses: tushar-stepsecurity/icd-test-action@bf295e279a4576b930d6c9144581de13f91335e3
