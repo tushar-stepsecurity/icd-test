@@ -16,5 +16,10 @@ jobs:
         uses: step-security/harden-runner@v2
         with:
           egress-policy: audit
+      # codeql-action has no action.yml at the repo root, so the step itself
+      # cannot run. That is fine: the runner downloads the action repository
+      # during "Set up job" and logs the line the analysis parses, before any
+      # step executes. continue-on-error keeps the suite green.
       - name: Action under test
+        continue-on-error: true
         uses: github/codeql-action@6f5948dfacef28e207b48d0905cf90c03365536d
