@@ -1,4 +1,4 @@
-name: s07 Annotated tag, single hop
+name: s13 Nested annotated tag chain
 
 on:
   workflow_dispatch:
@@ -16,5 +16,8 @@ jobs:
         uses: step-security/harden-runner@v2
         with:
           egress-policy: audit
+      # v2 -> v2-inner -> commit. A single-hop annotated tag is dereferenced by
+      # the runner itself (see s07), so only a nested chain reaches
+      # resolveTagChainToCommit.
       - name: Action under test
-        uses: tushar-stepsecurity/icd-test-action@v1-annotated
+        uses: tushar-stepsecurity/icd-test-action@v2
