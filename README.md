@@ -9,11 +9,16 @@ Fixtures for verifying the imposter-commit analysis fix
    `Error initializing feature flags: failed to fetch feature flags: 404 Not Found`,
    which means the platform does not recognise it. No correlation, no detections.
 
-2. **harden-runner@v2 talks to prod, not int.** The runs above report
-   `APIURL:https://agent.api.stepsecurity.io/v1`. To exercise the `int` deployment,
-   point harden-runner at int (per however int is normally targeted) — otherwise the
-   fix under test is not the code doing the analysing.
-3. **A scenario only exercises the analysis on a cache miss.** The `ImposterCommits`
+2. **All workflows use `step-security/harden-runner@int`**, matching
+   `step-security/imposter-action-test`, so runs report to the int deployment rather
+   than prod. Check the `APIURL:` line in the Post Harden Runner step to confirm which
+   environment a given run actually reached.
+
+3. **`harden-runner@int` is itself analysed, and `int` is not its default branch.**
+   Expect an `Action-Uses-Commit-From-Non-Default-Branch` detection for
+   `step-security/harden-runner` in *every* run. That is the harness, not a scenario
+   result — ignore it when reading evidence.
+4. **A scenario only exercises the analysis on a cache miss.** The `ImposterCommits`
    row is keyed on `action` + `sha` and shared globally, so the *first* run of a
    scenario is the meaningful one. To re-test, delete the row first:
 
