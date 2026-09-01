@@ -1,0 +1,74 @@
+# Single verification pass against the int deployment. Every SHA below was
+# created fresh, so no ImposterCommits row can exist for it: each job forces a
+# real analysis rather than a cache hit.
+#
+# Expected (confirmed by running the merged code against the live API):
+#   valid_main_tip        no detection          (on the default branch)
+#   valid_release_mid     non-default-branch    (contained in releases/v4, found by the walk)
+#   valid_release_tip     non-default-branch    (head of releases/v4, found by the fast path)
+#   imposter_shared       IMPOSTER
+#   imposter_unrelated    IMPOSTER              (compare returns 404 No common ancestor)
+#   valid_codeql_action   non-default-branch    (the 26 Aug incident SHA)
+#
+# harden-runner@int is itself analysed and int is not its default branch, so
+# every job also reports non-default-branch for step-security/harden-runner.
+# That is the harness, not a result.
+name: verify-int
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  valid_main_tip:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: step-security/harden-runner@int
+        with:
+          egress-policy: audit
+      - uses: tushar-stepsecurity/icd-test-action@5873064a8dc6642af21d549da57d1923b1d191c6
+
+  valid_release_mid:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: step-security/harden-runner@int
+        with:
+          egress-policy: audit
+      - uses: tushar-stepsecurity/icd-test-action@6e3faa94cd1dce847da57ad9c6abda3840d644ec
+
+  valid_release_tip:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: step-security/harden-runner@int
+        with:
+          egress-policy: audit
+      - uses: tushar-stepsecurity/icd-test-action@9622040d54b339cc6090042a9ebec9bde8869e5a
+
+  imposter_shared:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: step-security/harden-runner@int
+        with:
+          egress-policy: audit
+      - uses: tushar-stepsecurity/icd-test-action@4b4721a4ff3209d663e7e9c8b38a1a5a280caea2
+
+  imposter_unrelated:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: step-security/harden-runner@int
+        with:
+          egress-policy: audit
+      - uses: tushar-stepsecurity/icd-test-action@51931febbe2ceb6304e3c3262b99e35014f59aa4
+
+  valid_codeql_action:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: step-security/harden-runner@int
+        with:
+          egress-policy: audit
+      # Root action.yml is a stub that exits 1; the Set up job download line is
+      # what the analysis consumes.
+      - continue-on-error: true
+        uses: github/codeql-action@6f5948dfacef28e207b48d0905cf90c03365536d
