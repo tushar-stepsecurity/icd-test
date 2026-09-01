@@ -85,17 +85,20 @@ jobs:
   # compare(zzz-releases/v9...sha) = identical — in a repo with 2002 branches.
   #
   # The branch sorts last alphabetically, so the old code must compare roughly
-  # 2000 branches before reaching the one that answers. At the 0.56s per compare
-  # measured during the 26 Aug incident that is about 19 minutes, past any Lambda
-  # timeout, so prod cannot finish the analysis: expect no verdict, a timeout or
-  # a cached 403 from rate limiting, and retries.
+  # 2000 branches before reaching the one that answers. Both sides are measured,
+  # by running each codebase against this SHA on the live API:
   #
-  # The new code never walks. branches-where-head returns [zzz-releases/v9] in
-  # one call — measured at 2.8s for the whole analysis:
-  #   commit is the head of a branch, skipping branch walk branches="[zzz-releases/v9]"
+  #   pre-fix  imposter=false  elapsed=18m26s   (walks all 2002 branches)
+  #   fixed    imposter=false  elapsed=2.8s     (branches-where-head, one call)
   #
-  # Note this is a cost/completion failure on prod, not a false "imposter" label.
-  # A guaranteed false positive is not constructible: for a commit that is on a
+  # Same verdict, 395x apart. The pre-fix verdict is correct but unreachable in
+  # production: 18m26s exceeds the 15 minute Lambda maximum, so the analysis is
+  # killed mid-walk and the message retried. The local probe had no such limit,
+  # which is why it finished at all.
+  #
+  # So this is a cost/completion failure on prod, not a false "imposter" label -
+  # and no rate-limit 403 occurred, so a timeout is the failure to expect. A
+  # guaranteed false positive is not constructible: for a commit that is on a
   # branch, compare(branch...sha) always returns behind/identical, and the old
   # walk paginates to the end, so given enough time it finds it. The incident
   # needed a branch list mutating mid-pagination or a transient 404.
