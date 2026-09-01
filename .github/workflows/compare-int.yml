@@ -80,3 +80,31 @@ jobs:
           egress-policy: audit
       - name: Legitimate release commit
         uses: tushar-stepsecurity/icd-test-action@bf295e279a4576b930d6c9144581de13f91335e3
+
+  # A legitimate release commit — tip of zzz-releases/v9, tagged v9,
+  # compare(zzz-releases/v9...sha) = identical — in a repo with 2002 branches.
+  #
+  # The branch sorts last alphabetically, so the old code must compare roughly
+  # 2000 branches before reaching the one that answers. At the 0.56s per compare
+  # measured during the 26 Aug incident that is about 19 minutes, past any Lambda
+  # timeout, so prod cannot finish the analysis: expect no verdict, a timeout or
+  # a cached 403 from rate limiting, and retries.
+  #
+  # The new code never walks. branches-where-head returns [zzz-releases/v9] in
+  # one call — measured at 2.8s for the whole analysis:
+  #   commit is the head of a branch, skipping branch walk branches="[zzz-releases/v9]"
+  #
+  # Note this is a cost/completion failure on prod, not a false "imposter" label.
+  # A guaranteed false positive is not constructible: for a commit that is on a
+  # branch, compare(branch...sha) always returns behind/identical, and the old
+  # walk paginates to the end, so given enough time it finds it. The incident
+  # needed a branch list mutating mid-pagination or a transient 404.
+  huge_repo_valid_commit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@int
+        with:
+          egress-policy: audit
+      - name: Legitimate commit in a 2002-branch repo
+        uses: tushar-stepsecurity/icd-test-hugerepo@773b189f5f45fb40a57471a147dff31b138de2a7
