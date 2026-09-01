@@ -5,27 +5,28 @@
 #
 # Prerequisites in the int admin console, Integrations -> Webhook:
 #   1. "Use multiple webhooks" is on.
-#   2. Webhook A subscribes to Detections ONLY, and its Repository Selection
-#      includes this repo. Detections are org/repo filtered per destination, so
-#      an empty Repository Selection delivers nothing no matter what else is
-#      configured correctly.
-#   3. Webhook B subscribes to API Audit Logs ONLY. Audit logs are tenant level,
-#      so Repository Selection does not apply to them.
+#   2. The detections webhook subscribes to Detections AND has this repo picked in
+#      its Repository Selection. Detections are org/repo filtered per destination,
+#      and a destination added with "Add Webhook" starts with nothing selected, so
+#      an empty Repository Selection silently delivers nothing.
+#   3. The audit logs webhook subscribes to API Audit Logs. Those are tenant
+#      level, so Repository Selection does not apply to them. Turn Insights off
+#      there unless you want run insights mixed in.
 #   4. Audit logging is enabled for the tenant, otherwise there are no audit log
 #      records to export in the first place.
 #
-# Repo secret: STEPSECURITY_INT_API_KEY, a tenant API key for int.
+# Repo secret for the audit-log job: STEPSECURITY_INT_API_KEY, a tenant key for int.
 #
-# The point of the test is isolation, not just delivery: the detection payload
-# must not appear on webhook B, and the audit log payload must not appear on
-# webhook A.
+# The pass condition is isolation, not just delivery: the detection must not
+# appear on the audit logs webhook, and the audit log must not appear on the
+# detections webhook.
 name: multi-webhook-verify
 
 on:
   workflow_dispatch:
     inputs:
       emit_detection:
-        description: Emit a blocked outbound call for the detections webhook
+        description: Emit an Agent-Tampered detection for the detections webhook
         type: boolean
         default: true
       emit_audit_log:
@@ -42,23 +43,44 @@ jobs:
     if: ${{ inputs.emit_detection }}
     runs-on: ubuntu-latest
     steps:
-      # Block mode rather than audit: a blocked call is a detection on the very
-      # first run, whereas an anomalous call only fires once a baseline exists
-      # (min_runs_for_anomaly_detection), which would make a one-shot check flaky.
+      # Audit mode on purpose. Two other detection routes were ruled out first:
+      # a blocked egress call needs block mode, which currently degrades to audit
+      # on GitHub-hosted runners because harden-runner cannot fetch the Actions
+      # cache URL; and an anomalous outbound call only fires once a baseline
+      # exists, which defaults to 100 runs of this job.
       - name: Harden Runner
         uses: step-security/harden-runner@int
         with:
-          egress-policy: block
-          allowed-endpoints: >
-            github.com:443
-            api.github.com:443
+          egress-policy: audit
 
-      # example.com is deliberately absent from the allowlist, so this call is
-      # blocked and becomes the detection. Non-fatal on purpose: the detection is
-      # the artifact, a red run is not.
-      - name: Blocked outbound call
-        continue-on-error: true
-        run: curl -sS --max-time 20 -o /dev/null https://www.example.com || true
+      # Killing the monitoring agent makes harden-runner report the AgentTampered
+      # scenario, which CorrelateRun turns into an Agent-Tampered detection. That
+      # needs no baseline and works in audit mode, so it fires on the first run.
+      #
+      # Fails loudly if the agent is still alive afterwards: a silent no-op here
+      # would look identical to "the webhook routing is broken".
+      - name: Tamper with the monitoring agent
+        run: |
+          set -uo pipefail
+          echo "--- agent processes before ---"
+          ps -eo pid,comm,args | grep '[a]gent' || echo "(none matched)"
+
+          sudo killall -9 agent 2>/dev/null || true
+          sudo pkill -9 -x agent 2>/dev/null || true
+          sleep 3
+
+          echo "--- agent processes after ---"
+          ps -eo pid,comm,args | grep '[a]gent' || echo "(none matched)"
+
+          if pgrep -x agent >/dev/null 2>&1; then
+            echo "::error::agent is still running, the tamper did not take effect and no detection will be generated"
+            exit 1
+          fi
+          echo "agent stopped, expect an Agent-Tampered detection for this run"
+
+      # Give the run a little length so the post step reports the scenario.
+      - name: Settle
+        run: sleep 20
 
   audit-log:
     name: Emit an API audit log
@@ -66,9 +88,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       # Deliberately no harden-runner here. Audit logs come from StepSecurity API
-      # calls, not from runner telemetry, and leaving this job unmonitored keeps
-      # it from contributing outbound-call detections that would muddy the
-      # isolation check.
+      # calls, not runner telemetry, and leaving this job unmonitored keeps it
+      # from contributing detections that would muddy the isolation check.
       #
       # repo.controls.refresh is an audited write that only recomputes posture, so
       # it is safe to call repeatedly and leaves no other state behind.
@@ -78,7 +99,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "${API_KEY:-}" ]; then
-            echo "STEPSECURITY_INT_API_KEY is not set, cannot emit an audit log" >&2
+            echo "::error::STEPSECURITY_INT_API_KEY is not set, cannot emit an audit log"
             exit 1
           fi
           code=$(curl -sS -o /tmp/refresh.json -w '%{http_code}' -X POST \
