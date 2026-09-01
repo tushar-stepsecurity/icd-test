@@ -29,6 +29,10 @@ on:
         description: Emit an Agent-Tampered detection for the detections webhook
         type: boolean
         default: true
+      emit_insight:
+        description: Emit run insights, which fire on every monitored run
+        type: boolean
+        default: true
       emit_audit_log:
         description: Call an audited StepSecurity API for the audit logs webhook
         type: boolean
@@ -81,6 +85,29 @@ jobs:
       # Give the run a little length so the post step reports the scenario.
       - name: Settle
         run: sleep 20
+
+  insight:
+    name: Emit run insights
+    if: ${{ inputs.emit_insight }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@int
+        with:
+          egress-policy: audit
+
+      # Insights are emitted for every monitored run: no baseline, no block mode,
+      # nothing to trigger. That makes them the most reliable probe of whether a
+      # destination can receive anything at all, which is why this job exists
+      # separately from the detection one. The calls below only serve to give the
+      # insight payload a recognizable endpoint list.
+      - name: Make a few outbound calls
+        run: |
+          set -uo pipefail
+          for host in api.github.com github.com objects.githubusercontent.com; do
+            echo "calling $host"
+            curl -sS --max-time 15 -o /dev/null "https://$host" || true
+          done
 
   audit-log:
     name: Emit an API audit log
