@@ -1,0 +1,90 @@
+# Proves that the multiple-webhook integration routes each event category to its
+# own destination: detections to one webhook, StepSecurity API audit logs to
+# another. Targets int (harden-runner@int, int.api.stepsecurity.io), because
+# multi-webhook support only exists there.
+#
+# Prerequisites in the int admin console, Integrations -> Webhook:
+#   1. "Use multiple webhooks" is on.
+#   2. Webhook A subscribes to Detections ONLY, and its Repository Selection
+#      includes this repo. Detections are org/repo filtered per destination, so
+#      an empty Repository Selection delivers nothing no matter what else is
+#      configured correctly.
+#   3. Webhook B subscribes to API Audit Logs ONLY. Audit logs are tenant level,
+#      so Repository Selection does not apply to them.
+#   4. Audit logging is enabled for the tenant, otherwise there are no audit log
+#      records to export in the first place.
+#
+# Repo secret: STEPSECURITY_INT_API_KEY, a tenant API key for int.
+#
+# The point of the test is isolation, not just delivery: the detection payload
+# must not appear on webhook B, and the audit log payload must not appear on
+# webhook A.
+name: multi-webhook-verify
+
+on:
+  workflow_dispatch:
+    inputs:
+      emit_detection:
+        description: Emit a blocked outbound call for the detections webhook
+        type: boolean
+        default: true
+      emit_audit_log:
+        description: Call an audited StepSecurity API for the audit logs webhook
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  detection:
+    name: Emit a detection
+    if: ${{ inputs.emit_detection }}
+    runs-on: ubuntu-latest
+    steps:
+      # Block mode rather than audit: a blocked call is a detection on the very
+      # first run, whereas an anomalous call only fires once a baseline exists
+      # (min_runs_for_anomaly_detection), which would make a one-shot check flaky.
+      - name: Harden Runner
+        uses: step-security/harden-runner@int
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+
+      # example.com is deliberately absent from the allowlist, so this call is
+      # blocked and becomes the detection. Non-fatal on purpose: the detection is
+      # the artifact, a red run is not.
+      - name: Blocked outbound call
+        continue-on-error: true
+        run: curl -sS --max-time 20 -o /dev/null https://www.example.com || true
+
+  audit-log:
+    name: Emit an API audit log
+    if: ${{ inputs.emit_audit_log }}
+    runs-on: ubuntu-latest
+    steps:
+      # Deliberately no harden-runner here. Audit logs come from StepSecurity API
+      # calls, not from runner telemetry, and leaving this job unmonitored keeps
+      # it from contributing outbound-call detections that would muddy the
+      # isolation check.
+      #
+      # repo.controls.refresh is an audited write that only recomputes posture, so
+      # it is safe to call repeatedly and leaves no other state behind.
+      - name: Trigger an audited StepSecurity API write
+        env:
+          API_KEY: ${{ secrets.STEPSECURITY_INT_API_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${API_KEY:-}" ]; then
+            echo "STEPSECURITY_INT_API_KEY is not set, cannot emit an audit log" >&2
+            exit 1
+          fi
+          code=$(curl -sS -o /tmp/refresh.json -w '%{http_code}' -X POST \
+            -H "Authorization: Bearer ${API_KEY}" \
+            "https://int.api.stepsecurity.io/v1/github/${{ github.repository }}/refresh/controls")
+          echo "repo.controls.refresh -> HTTP ${code}"
+          cat /tmp/refresh.json || true
+          echo
+          [ "${code}" -lt 400 ]
