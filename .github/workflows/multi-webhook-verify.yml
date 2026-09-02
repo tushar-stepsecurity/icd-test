@@ -26,9 +26,13 @@ on:
   workflow_dispatch:
     inputs:
       emit_detection:
-        description: Emit an Agent-Tampered detection for the detections webhook
+        description: Emit a Source-Code-Overwritten detection for the detections webhook
         type: boolean
         default: true
+      emit_tamper:
+        description: Also kill the agent for an Agent-Tampered detection, hangs the job
+        type: boolean
+        default: false
       emit_insight:
         description: Emit run insights, which fire on every monitored run
         type: boolean
@@ -47,22 +51,57 @@ jobs:
     if: ${{ inputs.emit_detection }}
     runs-on: ubuntu-latest
     steps:
-      # Audit mode on purpose. Two other detection routes were ruled out first:
-      # a blocked egress call needs block mode, which currently degrades to audit
-      # on GitHub-hosted runners because harden-runner cannot fetch the Actions
-      # cache URL; and an anomalous outbound call only fires once a baseline
-      # exists, which defaults to 100 runs of this job.
       - name: Harden Runner
         uses: step-security/harden-runner@int
         with:
           egress-policy: audit
 
-      # Killing the monitoring agent makes harden-runner report the AgentTampered
-      # scenario, which CorrelateRun turns into an Agent-Tampered detection. That
-      # needs no baseline and works in audit mode, so it fires on the first run.
+      # Checkout first so the agent observes the repository's real files before
+      # any of them are rewritten.
+      - uses: actions/checkout@v6
+
+      # Source-Code-Overwritten comes from a file event the agent records when an
+      # existing file is rewritten in place. Preferred over killing the agent
+      # (Agent-Tampered): that does report the scenario, but it leaves the runner
+      # unable to shut down, so the job hangs for around 17 minutes and ends
+      # cancelled. Set emit_tamper to use that path instead.
       #
-      # Fails loudly if the agent is still alive afterwards: a silent no-op here
-      # would look identical to "the webhook routing is broken".
+      # Paths under .git, temp and _temp are excluded from file insights, so the
+      # rewrites target tracked files and a src directory.
+      - name: Overwrite tracked files
+        run: |
+          set -uo pipefail
+          mkdir -p src
+          printf 'print("original")\n' > src/app.py
+          printf 'console.log("original");\n' > src/app.js
+          sleep 10
+
+          # Truncating rewrites, by a different process than the one that created
+          # them, so they register as overwrites rather than creates.
+          python3 -c "open('README.md','w').write('overwritten by run ${{ github.run_id }}\n')"
+          python3 -c "open('src/app.py','w').write('print(\"overwritten\")\n')"
+          python3 -c "open('src/app.js','w').write('console.log(\"overwritten\");\n')"
+
+          echo "--- rewritten ---"
+          ls -l README.md src
+
+      - name: Settle
+        run: sleep 25
+
+  tamper:
+    name: Emit a detection by tampering
+    if: ${{ inputs.emit_tamper }}
+    runs-on: ubuntu-latest
+    # Killing the agent leaves the runner unable to shut down cleanly, so this
+    # job sits idle after its work is done. Bounded so it cannot occupy a runner
+    # for the default 6 hours.
+    timeout-minutes: 6
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@int
+        with:
+          egress-policy: audit
+
       - name: Tamper with the monitoring agent
         run: |
           set -uo pipefail
@@ -82,7 +121,6 @@ jobs:
           fi
           echo "agent stopped, expect an Agent-Tampered detection for this run"
 
-      # Give the run a little length so the post step reports the scenario.
       - name: Settle
         run: sleep 20
 
