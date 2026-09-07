@@ -1,0 +1,98 @@
+# Scenarios that exercise the evidence ladder added in PR #10321, with fresh
+# SHAs so nothing can be answered from an existing ImposterCommits row.
+#
+# Measured by running both codebases against these same six fixtures on the live
+# API before this workflow was written:
+#
+#   job                          pre-fix              with the ladder
+#   a_tag_only_sha_pinned        IMPOSTER  <- wrong   non-default-branch
+#   b_tag_only_tag_pinned        IMPOSTER  <- wrong   non-default-branch
+#   c_tag_only_nested_tag        IMPOSTER  <- wrong   non-default-branch
+#   d_no_tag_no_branch           IMPOSTER             IMPOSTER
+#   e_in_release_branch_not_tip  non-default-branch   non-default-branch
+#   f_release_branch_tip         non-default-branch   non-default-branch
+#
+# A, B and C are the false positives the ladder removes: a commit reachable only
+# from a published tag is a release, not a hidden commit. D is the control that
+# proves real detection survives - it differs from A only in having no tag.
+#
+# D and A together also make the security trade visible: an attacker who points a
+# tag at an orphaned commit is cleared by rung 2, where the old branch walk would
+# have flagged it. That is a deliberate consequence of trusting published tags.
+#
+# step-security/harden-runner@int is itself analysed and int is not its default
+# branch, so every job also reports non-default-branch for it. That is the
+# harness, not a result.
+name: verify-int-ladder
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+
+  # Reachable only from tag v10 - on no branch at all. Rung 2: getActionTag's
+  # reverse lookup already found the tag, so it costs nothing.
+  # Expect now: non-default-branch   (pre-fix: IMPOSTER)
+  a_tag_only_sha_pinned:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: step-security/harden-runner@int
+        with:
+          egress-policy: audit
+      - uses: tushar-stepsecurity/icd-test-action@a981de723e18d2d4c67cefdf9dd9f1cdb108e84b
+
+  # Same shape as A but the workflow names the tag. Rung 3: one GetRef on
+  # refs/tags/v11 confirms it points here.
+  # Expect now: non-default-branch   (pre-fix: IMPOSTER)
+  b_tag_only_tag_pinned:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: step-security/harden-runner@int
+        with:
+          egress-policy: audit
+      - uses: tushar-stepsecurity/icd-test-action@v11
+
+  # v12 -> v12-inner -> commit, all annotated. Rung 3 plus the tag-chain walk.
+  # Expect now: non-default-branch   (pre-fix: IMPOSTER)
+  c_tag_only_nested_tag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: step-security/harden-runner@int
+        with:
+          egress-policy: audit
+      - uses: tushar-stepsecurity/icd-test-action@v12
+
+  # The control. Identical to A except no tag points at it, so there is no
+  # published evidence and it must still be flagged.
+  # Expect now: IMPOSTER   (pre-fix: IMPOSTER)
+  d_no_tag_no_branch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: step-security/harden-runner@int
+        with:
+          egress-policy: audit
+      - uses: tushar-stepsecurity/icd-test-action@d869ab01e34b2d3809d99d318134af3cf77c03fe
+
+  # Contained in releases/v6 but not its tip and untagged, so the branch walk
+  # has to answer. Regression guard for the slow path.
+  # Expect now: non-default-branch   (pre-fix: non-default-branch)
+  e_in_release_branch_not_tip:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: step-security/harden-runner@int
+        with:
+          egress-policy: audit
+      - uses: tushar-stepsecurity/icd-test-action@690bee8d4fd5a277539ab7a901f5bd2b7d81dcf9
+
+  # Tip of releases/v6. Rung 4, branches-where-head.
+  # Expect now: non-default-branch   (pre-fix: non-default-branch)
+  f_release_branch_tip:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: step-security/harden-runner@int
+        with:
+          egress-policy: audit
+      - uses: tushar-stepsecurity/icd-test-action@6ec21101275145ae6cd1f1054f24c2bfc5853b48
