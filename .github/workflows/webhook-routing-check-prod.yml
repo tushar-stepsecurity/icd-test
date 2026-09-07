@@ -1,0 +1,91 @@
+# Repeatable routing check against PRODUCTION harden-runner: every dispatch
+# produces one insight and one detection carrying the same run_id, so the split
+# between the insights webhook and the detections webhook can be verified from a
+# single run.
+#
+# This is the prod twin of webhook-routing-check.yml. The only difference is the
+# harden-runner ref: @v2 reports to production, @int to the int environment.
+# Kept as a separate file on purpose, because detections are deduplicated on
+# (workflow_id, detection) and workflow_id is owner-repo-<workflow path> — a
+# separate path gives prod its own detection identity space, so runs here are
+# never suppressed by anything the int fixture already produced.
+#
+# Why the run id is in the fixture filename: the detection for this type is
+# "Source-Code-Overwritten-<file name>", and neither it nor workflow_id carries a
+# run id. Overwriting a fixed filename would therefore produce exactly one
+# detection ever, with later runs correctly silent. Naming the file after the run
+# gives every dispatch a detection identity it has never seen, which makes this
+# re-runnable indefinitely without editing the workflow or clearing DynamoDB.
+#
+# Insights fire on every monitored run regardless, so a run that delivers an
+# insight but no detection means the detection was deduplicated or never
+# produced — not that routing is broken.
+name: webhook-routing-check-prod
+
+on:
+  workflow_dispatch:
+    inputs:
+      emit_detection:
+        description: Emit a Source-Code-Overwritten detection, unique per run
+        type: boolean
+        default: true
+      emit_insight:
+        description: Emit run insights, which fire on every monitored run
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  detection:
+    name: Emit a detection
+    if: ${{ inputs.emit_detection }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
+
+      # Checkout first so the agent is watching a real workspace before anything
+      # is rewritten.
+      - uses: actions/checkout@v6
+
+      - name: Overwrite a file unique to this run
+        run: |
+          set -uo pipefail
+          fixture="src/fixture-${{ github.run_id }}.py"
+          mkdir -p src
+
+          printf 'print("original")\n' > "$fixture"
+          sleep 10
+
+          # Truncating rewrite by a different process than the one that created
+          # it, so the agent records an overwrite rather than a create.
+          python3 -c "open('$fixture','w').write('print(\"overwritten\")\n')"
+
+          echo "--- rewritten ---"
+          ls -l "$fixture"
+          echo "expect detection: Source-Code-Overwritten-fixture-${{ github.run_id }}.py"
+
+      - name: Settle
+        run: sleep 25
+
+  insight:
+    name: Emit run insights
+    if: ${{ inputs.emit_insight }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
+
+      - name: Make a few outbound calls
+        run: |
+          set -uo pipefail
+          for host in api.github.com github.com objects.githubusercontent.com; do
+            echo "calling $host"
+            curl -sS --max-time 15 -o /dev/null "https://$host" || true
+          done
