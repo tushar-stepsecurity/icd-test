@@ -1,0 +1,94 @@
+# Second pass of the ladder scenarios, on SHAs created fresh for this run so
+# every job forces a real analysis instead of reading an existing
+# ImposterCommits row. The first pass (verify-int-ladder.yml) is now cached and
+# proves nothing.
+#
+# These expectations are for the BRANCH-ONLY criterion, which is what the branch
+# does after becb4185a: a commit is legitimate only if some branch contains it,
+# matching GitHub's own definition of an orphaned commit. A tag is recorded on
+# the row as a label and is not evidence.
+#
+#   job                            branch-only            with the tag rungs
+#   a2_tag_only_sha_pinned         IMPOSTER               not on default branch
+#   b2_tag_only_tag_pinned         IMPOSTER               not on default branch
+#   c2_tag_only_nested_tag         IMPOSTER               not on default branch
+#   d2_no_tag_no_branch            IMPOSTER               IMPOSTER
+#   e2_in_release_branch_not_tip   not on default branch  not on default branch
+#   f2_release_branch_tip          not on default branch  not on default branch
+#
+# So A2, B2 and C2 are the discriminator. If they come back as "not on default
+# branch" the deployment still has the tag rungs; if they come back IMPOSTER it
+# is running the branch-only criterion.
+#
+# step-security/harden-runner@int is itself analysed and int is not its default
+# branch, so every job also reports not-on-default-branch for it. That is the
+# harness, not a result.
+name: verify-int-ladder-v2
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+
+  # Reachable only from tag v20 - contained in no branch.
+  # Expect: IMPOSTER
+  a2_tag_only_sha_pinned:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: step-security/harden-runner@int
+        with:
+          egress-policy: audit
+      - uses: tushar-stepsecurity/icd-test-action@0669f4bf7ce373639fe1025cc969048edf71fbc2
+
+  # Same shape as A2, but the workflow names the tag rather than the sha.
+  # Expect: IMPOSTER
+  b2_tag_only_tag_pinned:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: step-security/harden-runner@int
+        with:
+          egress-policy: audit
+      - uses: tushar-stepsecurity/icd-test-action@v21
+
+  # v22 -> v22-inner -> commit, both annotated. Still no branch contains it.
+  # Expect: IMPOSTER
+  c2_tag_only_nested_tag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: step-security/harden-runner@int
+        with:
+          egress-policy: audit
+      - uses: tushar-stepsecurity/icd-test-action@v22
+
+  # No tag either. The control: identical to A2 except nothing points at it.
+  # Expect: IMPOSTER
+  d2_no_tag_no_branch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: step-security/harden-runner@int
+        with:
+          egress-policy: audit
+      - uses: tushar-stepsecurity/icd-test-action@f0955ab6f107652f96e72baa988edc3de44b45db
+
+  # Contained in releases/v7 but not its tip, so the walk has to answer.
+  # Expect: not on default branch
+  e2_in_release_branch_not_tip:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: step-security/harden-runner@int
+        with:
+          egress-policy: audit
+      - uses: tushar-stepsecurity/icd-test-action@44e47da1b9eca2a56b072a79eb2770c511b717fc
+
+  # Tip of releases/v7, answered by the branch-head check in one call.
+  # Expect: not on default branch
+  f2_release_branch_tip:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: step-security/harden-runner@int
+        with:
+          egress-policy: audit
+      - uses: tushar-stepsecurity/icd-test-action@f4c28171e939b0fad776ddd4fdb4e8f237ed0b85
