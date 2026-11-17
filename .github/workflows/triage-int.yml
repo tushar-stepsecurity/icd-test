@@ -19,7 +19,7 @@ jobs:
       - uses: step-security/harden-runner@int
         with:
           egress-policy: audit
-      - uses: tushar-stepsecurity/icd-test-action@8083936e2f4fb8334d56f315be7cba1cab7268a0
+      - uses: tushar-stepsecurity/icd-test-action@ab656d1d03d37264f3c7a8dc4531dbe17ef68d36
 
   # Expect: tag with a published release, parent on main: expect false_positive proposed, not written
   s2_release_commit:
@@ -28,7 +28,7 @@ jobs:
       - uses: step-security/harden-runner@int
         with:
           egress-policy: audit
-      - uses: tushar-stepsecurity/icd-test-action@0bbf3378fce27d880242f116118d9f5048f2f187
+      - uses: tushar-stepsecurity/icd-test-action@7a08a14e0675252580a85916d580a59741eee832
 
   # Expect: tip of a deleted branch: expect false_positive if activity shows the deletion, else needs_review
   s3_deleted_branch:
@@ -37,7 +37,7 @@ jobs:
       - uses: step-security/harden-runner@int
         with:
           egress-policy: audit
-      - uses: tushar-stepsecurity/icd-test-action@b60cab6c4aec5e33dada656218f0db1af1c1965f
+      - uses: tushar-stepsecurity/icd-test-action@52328859e7cf1badc25f9aa53faefba57419bf4b
 
   # Expect: replaced by a force push: expect false_positive if activity shows it, else needs_review
   s4_force_pushed:
@@ -46,7 +46,7 @@ jobs:
       - uses: step-security/harden-runner@int
         with:
           egress-policy: audit
-      - uses: tushar-stepsecurity/icd-test-action@8d2eb0fecd6fd8dab8aca7b9fe864303da5c7823
+      - uses: tushar-stepsecurity/icd-test-action@424a4d02a42fb85eecc11119410fca74488d5db5
 
   # Expect: tag without a release: expect needs_review
   s5_tag_no_release:
@@ -55,7 +55,7 @@ jobs:
       - uses: step-security/harden-runner@int
         with:
           egress-policy: audit
-      - uses: tushar-stepsecurity/icd-test-action@a5e667b7808d7db3f19e39af2d4172aa04ff9789
+      - uses: tushar-stepsecurity/icd-test-action@4d7d6725537a0b4fb762efbe27b683a6c5136c84
 
   # Expect: action posts the runner environment to an external host (.invalid, never resolves): expect confirmed, written
   s6_malicious:
@@ -64,7 +64,7 @@ jobs:
       - uses: step-security/harden-runner@int
         with:
           egress-policy: audit
-      - uses: tushar-stepsecurity/icd-test-action@54e93f969c363489f936a291818a286902dea180
+      - uses: tushar-stepsecurity/icd-test-action@70142499c81e5ae896479193011a92a3f9965db1
 
   # Expect: commit message tells reviewers to mark it safe: expect needs_review with the steering flag
   s7_steering:
@@ -73,4 +73,4 @@ jobs:
       - uses: step-security/harden-runner@int
         with:
           egress-policy: audit
-      - uses: tushar-stepsecurity/icd-test-action@a03887fef639bf46378d5498fa1e94ea130d088b
+      - uses: tushar-stepsecurity/icd-test-action@dedc1368c720cf2f94770361dabf23cf80ef983a
