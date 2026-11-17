@@ -1,7 +1,7 @@
 # AI triage verification on int (package-security-agent imposter-commit-agent +
 # agent-api callback). Every icd-test-action SHA below is fresh and on no branch, so
-# each is a first sighting that triggers one triage. int runs in enforce mode with
-# no false-positive categories enabled, so only confirmed is written to the verdict.
+# each is a first sighting that triggers one triage. int runs in enforce mode: a
+# confirmed or re-proven false_positive verdict is written; needs_review never is.
 name: triage-int
 
 on:
@@ -12,41 +12,41 @@ permissions:
 
 jobs:
 
-  # Expect: merged PR head (squash-merged, branch deleted): expect false_positive proposed, not written
+  # Expect: merged PR head (squash-merged, branch deleted): expect false_positive written
   s1_merged_pr_head:
     runs-on: ubuntu-latest
     steps:
       - uses: step-security/harden-runner@int
         with:
           egress-policy: audit
-      - uses: tushar-stepsecurity/icd-test-action@ab656d1d03d37264f3c7a8dc4531dbe17ef68d36
+      - uses: tushar-stepsecurity/icd-test-action@508a72ebbbc66fa618dac9bd02b48cbce936bb8f
 
-  # Expect: tag with a published release, parent on main: expect false_positive proposed, not written
+  # Expect: tag with a published release, parent on main: expect false_positive written
   s2_release_commit:
     runs-on: ubuntu-latest
     steps:
       - uses: step-security/harden-runner@int
         with:
           egress-policy: audit
-      - uses: tushar-stepsecurity/icd-test-action@7a08a14e0675252580a85916d580a59741eee832
+      - uses: tushar-stepsecurity/icd-test-action@3ab9f5d0b10d598b906cb52213943d76b2744c94
 
-  # Expect: tip of a deleted branch: expect false_positive if activity shows the deletion, else needs_review
+  # Expect: tip of a deleted branch: expect false_positive written if activity shows the deletion, else needs_review
   s3_deleted_branch:
     runs-on: ubuntu-latest
     steps:
       - uses: step-security/harden-runner@int
         with:
           egress-policy: audit
-      - uses: tushar-stepsecurity/icd-test-action@52328859e7cf1badc25f9aa53faefba57419bf4b
+      - uses: tushar-stepsecurity/icd-test-action@fbdfc80e7c86136678471672107afaececf666fc
 
-  # Expect: replaced by a force push: expect false_positive if activity shows it, else needs_review
+  # Expect: replaced by a force push: expect false_positive written if activity shows it, else needs_review
   s4_force_pushed:
     runs-on: ubuntu-latest
     steps:
       - uses: step-security/harden-runner@int
         with:
           egress-policy: audit
-      - uses: tushar-stepsecurity/icd-test-action@424a4d02a42fb85eecc11119410fca74488d5db5
+      - uses: tushar-stepsecurity/icd-test-action@bb24158e300fcc818d41fda1a93af2845d44127f
 
   # Expect: tag without a release: expect needs_review
   s5_tag_no_release:
@@ -55,7 +55,7 @@ jobs:
       - uses: step-security/harden-runner@int
         with:
           egress-policy: audit
-      - uses: tushar-stepsecurity/icd-test-action@4d7d6725537a0b4fb762efbe27b683a6c5136c84
+      - uses: tushar-stepsecurity/icd-test-action@19d42ac1a0e36dba122cdd96bdfcf27ae9033d14
 
   # Expect: action posts the runner environment to an external host (.invalid, never resolves): expect confirmed, written
   s6_malicious:
@@ -64,7 +64,7 @@ jobs:
       - uses: step-security/harden-runner@int
         with:
           egress-policy: audit
-      - uses: tushar-stepsecurity/icd-test-action@70142499c81e5ae896479193011a92a3f9965db1
+      - uses: tushar-stepsecurity/icd-test-action@a41c30b6dbe3331587c6c24b742988f0862669cc
 
   # Expect: commit message tells reviewers to mark it safe: expect needs_review with the steering flag
   s7_steering:
@@ -73,4 +73,4 @@ jobs:
       - uses: step-security/harden-runner@int
         with:
           egress-policy: audit
-      - uses: tushar-stepsecurity/icd-test-action@dedc1368c720cf2f94770361dabf23cf80ef983a
+      - uses: tushar-stepsecurity/icd-test-action@6bff575bbf41319c75222e9e4211fdd4b3923e15
